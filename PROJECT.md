@@ -1,8 +1,9 @@
 # Market Making Simulator — NUS MComp GT Capstone
 # 做市商模拟器 — NUS 计算机硕士毕业项目
 
-> **Last updated / 最后更新:** 2026-06-10 (Phase 2 added)  
-> **Stack / 技术栈:** Python · pandas · numpy · matplotlib
+> **Last updated / 最后更新:** 2026-06-11  
+> **Stack / 技术栈:** Python · pandas · numpy · matplotlib  
+> **GitHub:** https://github.com/YouLi128/market-making-sim
 
 ---
 
