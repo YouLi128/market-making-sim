@@ -104,18 +104,10 @@ inventory_gain = inventory × (mid_now - mid_prev)
 
 ---
 
-## 7. 回测框架 / Backtesting Framework
+## ~~7. 回测框架 / Backtesting Framework~~ ✅ 已完成
 
-**现状：** 每次运行是单条路径的前向模拟，没有统计意义上的评估。
-
-**可以做：** 跑 1000 条 Monte Carlo 路径，对每个模型输出：
-- P&L 分布（均值、标准差、Sharpe ratio）
-- 最大回撤分布
-- 库存超限频率
-
-用统计方法证明 Phase 4 在**所有路径上**都优于 Phase 1，而不只是一条示例路径。
-
-**难度：** ⭐⭐（代码改动不大，主要是循环 + 统计汇总）
+500 条 Monte Carlo 路径，跨路径 Sharpe：Baseline 1.09 → Phase 4 3.19。
+详见 `run_montecarlo.py` 和 `montecarlo_results.png`。
 
 ---
 
@@ -129,8 +121,9 @@ inventory_gain = inventory × (mid_now - mid_prev)
 | ⭐⭐ 高 | GARCH 波动率 | BTC 场景下效果明显 |
 | ⭐⭐⭐ 中 | 精确 P&L 归因 | 论文细节加分 |
 | ⭐⭐⭐ 中 | 完整 AS 公式 | 对标原始文献 |
+| ~~⭐⭐ 高~~ | ~~Monte Carlo 回测~~ | ✅ 已完成 |
 | ⭐⭐⭐⭐ 低 | 多品种对冲 | 工程量大，时间不够别做 |
 
 ---
 
-*优先做前两个，两周内能完成，面试说服力翻倍。*
+*接下来优先：接入真实数据 + VPIN。*
