@@ -449,3 +449,65 @@ def plot_attribution(
 
     fig.suptitle(title, fontsize=13, fontweight="bold")
     return fig
+
+
+def plot_montecarlo(
+    stats: dict,
+    n_paths: int,
+    title: str = "Monte Carlo Backtest",
+) -> plt.Figure:
+    COLORS = {"Baseline": "grey", "AS": "steelblue", "Phase3": "darkorange", "Phase4": "firebrick"}
+    LABELS = {"Baseline": "Phase 1\nBaseline", "AS": "Phase 2\nAS",
+              "Phase3": "Phase 3\nAdv. Sel.", "Phase4": "Phase 4\nRisk Ctrl"}
+
+    names  = list(stats.keys())
+    colors = [COLORS[n] for n in names]
+
+    fig = plt.figure(figsize=(14, 12))
+    gs  = gridspec.GridSpec(2, 2, hspace=0.45, wspace=0.35,
+                            top=0.92, bottom=0.07, left=0.08, right=0.97)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[1, 0])
+    ax4 = fig.add_subplot(gs[1, 1])
+
+    def violin(ax, key, ylabel, title_str):
+        data  = [stats[n][key] for n in names]
+        parts = ax.violinplot(data, positions=range(len(names)),
+                              showmedians=True, showextrema=True)
+        for pc, c in zip(parts["bodies"], colors):
+            pc.set_facecolor(c)
+            pc.set_alpha(0.6)
+        for k in ("cmedians", "cmins", "cmaxes", "cbars"):
+            parts[k].set_color("black")
+        ax.set_xticks(range(len(names)))
+        ax.set_xticklabels([LABELS[n] for n in names], fontsize=8)
+        ax.set_ylabel(ylabel, fontsize=9)
+        ax.set_title(title_str, fontsize=10)
+        ax.axhline(0, color="black", lw=0.6, linestyle="--")
+        ax.grid(True, alpha=0.2, axis="y")
+
+    violin(ax1, "final_pnl",    "USD",  "Final MtM P&L distribution")
+    violin(ax2, "max_drawdown", "USD",  "Max Drawdown distribution")
+    violin(ax3, "inv_std",      "BTC",  "Inventory Std Dev distribution")
+
+    # Sharpe bar chart (cross-path: mean / std of final P&L)
+    sharpes = []
+    for n in names:
+        arr = np.array(stats[n]["final_pnl"])
+        sharpes.append(arr.mean() / (arr.std() + 1e-9))
+
+    bars = ax4.bar(range(len(names)), sharpes, color=colors, alpha=0.75, width=0.5)
+    for bar, val in zip(bars, sharpes):
+        ax4.text(bar.get_x() + bar.get_width() / 2,
+                 val + (0.02 if val >= 0 else -0.12),
+                 f"{val:.2f}", ha="center", fontsize=9, fontweight="bold")
+    ax4.set_xticks(range(len(names)))
+    ax4.set_xticklabels([LABELS[n] for n in names], fontsize=8)
+    ax4.set_ylabel("Sharpe  (mean / std  across paths)", fontsize=9)
+    ax4.set_title("Cross-path Sharpe — P&L consistency across market conditions", fontsize=10)
+    ax4.axhline(0, color="black", lw=0.6, linestyle="--")
+    ax4.grid(True, alpha=0.2, axis="y")
+
+    fig.suptitle(f"{title}  ({n_paths} paths)", fontsize=13, fontweight="bold")
+    return fig
