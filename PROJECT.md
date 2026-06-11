@@ -1,0 +1,353 @@
+# Market Making Simulator — NUS MComp GT Capstone
+# 做市商模拟器 — NUS 计算机硕士毕业项目
+
+> **Last updated / 最后更新:** 2026-06-10 (Phase 2 added)  
+> **Stack / 技术栈:** Python · pandas · numpy · matplotlib
+
+---
+
+## Project Goal / 项目目标
+
+**EN:** Build a market making simulator on real-time price data, starting from a naive fixed-spread baseline and progressively improving toward the Avellaneda-Stoikov (AS) model. The goal is to demonstrate, step by step, *why* each improvement matters — inventory drift, adverse selection, and risk regime — using BTC as the primary asset (24/7, high vol, inventory risk visible immediately).
+
+**中文:** 在真实价格数据上构建一个做市商模拟器，从最简单的固定价差基线策略出发，逐步演进到 Avellaneda-Stoikov (AS) 最优做市模型。目的是用 BTC 作为标的（24小时交易、高波动、库存风险直观可见），一步步展示每次改进的必要性——库存漂移、逆向选择、风险控制。
+
+---
+
+## Roadmap / 阶段计划
+
+| Phase | 阶段 | 内容 | Status |
+|-------|------|------|--------|
+| **1** | 基线做市商 | Fixed spread δ around mid · track cash / inventory / MtM P&L | ✅ Done |
+| **2** | Avellaneda-Stoikov 模型 | Dynamic reservation price · optimal spread based on inventory & volatility | ✅ Done |
+| **3** | 逆向选择检测 | Detect informed order flow · widen spread on toxic flow | ✅ Done |
+| **4** | 风险控制 | Inventory hard limits · volatility regime switching | ✅ Done |
+| **5** | P&L 归因分析 | Decompose P&L → spread capture / inventory risk / adverse selection loss | ✅ Done |
+
+---
+
+## Progress Log / 进度记录
+
+### 2026-06-10 — Phase 5 Complete (All phases done)
+
+**EN:** Performance attribution complete. All four models run on the same regime-switching price path (seed=7). Key results: Baseline earns highest spread P&L (+$432) but has widest inventory swings (std=0.10 BTC); AS dramatically tightens inventory (std=0.056) but at cost of lower spread P&L (+$237); Phase 3 recovers spread P&L (+$376) via higher fill rate while reducing inventory std further (0.046); Phase 4 achieves tightest inventory (std=0.036) with good spread capture (+$372) and best inventory P&L control (-$17). The three-panel chart (P&L curves / inventory curves / decomposition bars) is the thesis conclusion figure.
+
+**中文:** 归因分析完成，四个模型跑在同一条价格路径上。核心结论：基线价差收益最高但库存漂移最大；AS 大幅收紧库存但成交减少；Phase 3 在保持库存控制的同时恢复了成交量；Phase 4 库存最稳定（标准差 0.036 BTC），价差收益接近基线。三格对比图（P&L 曲线/库存曲线/分解柱状图）是论文结论页的核心图表。
+
+---
+
+### 2026-06-10 — Phase 4 Complete
+
+**EN:** Risk controls implemented with three stacking layers: (1) Hard inventory limit — if inventory exceeds ±0.10 BTC, the over-limit direction is blocked entirely; (2) Volatility regime detection — rolling 30-step realized vol compared to 1.2× baseline threshold, spread multiplied by 1.3× when high vol detected (11% of session); (3) Emergency liquidation — BTC-appropriate: triggers when same-side inventory held >120 steps OR inventory floating loss exceeds −$150 (not session-close based, since BTC trades 24/7). Result vs Phase 3: max inventory reduced 0.16→0.11 BTC, inventory std dev −21%, final P&L +$355 vs +$308, max drawdown −$20 vs −$28.
+
+**中文:** 风险控制完成，三层叠加保护：(1) 库存硬限制——库存超过 ±0.10 BTC 时自动封锁该方向报价；(2) 波动率切换——滚动窗口实现波动率超过基准 1.2 倍时价差乘以 1.3 倍（约 11% 的时间触发）；(3) 紧急清仓——针对 BTC 24/7 特性改进：触发条件为"同方向持仓超过 120 步"或"库存浮动亏损超过 -$150"（不再依赖收盘时间）。对比 Phase 3：最大库存 0.16→0.11 BTC，库存标准差降 21%，最终 P&L +$355 vs +$308，最大回撤 $20 vs $28。
+
+---
+
+### 2026-06-10 — Phase 3 Complete
+
+**EN:** Adverse selection detection implemented. Added regime-switching price generator (normal random walk ↔ trending periods that simulate informed traders). Toxicity score tracks directional consistency of recent price moves — when price keeps going one way, informed flow is likely active. When toxicity exceeds threshold, spread widens automatically: `delta_eff = delta_base × (1 + 2.0 × toxicity)`. Fill probability uses absolute exponential decay from mid, so wider spreads = fewer fills = less exposure to informed flow. Result vs Phase 2 AS: inventory std dev −30% (0.096 → 0.067 BTC), final P&L +$306 vs +$43, max drawdown −$0.86 vs −$5.90.
+
+**中文:** 逆向选择检测完成。新增两部分：(1) 带趋势阶段的价格生成器——模拟知情交易者活跃时的市场（正常随机游走 ↔ 单边漂移阶段）；(2) 毒性分数实时检测——滚动窗口统计最近价格方向一致性，持续单边运动 = 知情流活跃 = 自动加宽价差。价差加宽后报价远离中间价，成交概率指数下降，减少在知情流面前的暴露。对比 Phase 2 AS：库存标准差降低 30%，最终 P&L +$306 vs +$43，最大回撤 $0.86 vs $5.90。
+
+---
+
+### 2026-06-10 — Phase 2 Complete
+
+**EN:** Avellaneda-Stoikov model implemented. Two mechanisms added: (1) reservation price `r = mid − γ·q·τ` skews quotes away from mid proportionally to inventory — when long, the ask gets cheaper and fills more readily; (2) time-decaying spread narrows from $50 → $5 as the session ends, increasing urgency to flatten inventory. Fill probabilities now respond to quote distance from mid. Result on same price path: max inventory halved (0.47 → 0.23 BTC), inventory std dev reduced 21% (0.122 → 0.096 BTC). Note: on this particular upward-trending path, baseline outperforms in total P&L because it got lucky holding long inventory during a BTC rally — AS intentionally avoids that directional bet, which hurts on uptrends but protects on downtrends.
+
+**中文:** Avellaneda-Stoikov 模型完成。新增两个机制：(1) 保留价格 `r = mid − γ·q·τ` 根据库存量偏离中间价——持多头时卖价变便宜、更容易成交，库存自然回归；(2) 价差随时间收窄（$50 → $5），临近收盘时做市商被迫更积极地平仓。成交概率现在响应报价距离中间价的远近。相同价格路径上的结果：最大库存减半（0.47 → 0.23 BTC），库存标准差下降 21%。注意：本次路径 BTC 整体上涨，基线因为碰巧积累多头而赚得更多——这是运气，不是策略优势；AS 主动规避了这个方向性赌注，在上涨路径中吃亏，但在下跌路径中得到保护。
+
+---
+
+### 2026-06-10 — Phase 1 Complete
+
+**EN:** Baseline market maker implemented and tested. Key result: with fixed δ=$50, 1 day of 1-min BTC bars, the maker captures ~$0.30/min in spread P&L, but inventory drifts randomly (max 0.47 BTC) and can fully erase spread gains. This is the exact failure mode that motivates the AS model.
+
+**中文:** 基线做市商完成并通过测试。核心结论：固定价差 δ=$50，模拟 1 天 BTC 分钟数据，每分钟稳定捕捉约 $0.30 的价差收益，但库存随机漂移（最大 0.47 BTC），方向性敞口可以完全吃掉价差利润。这正是 AS 模型要解决的核心问题。
+
+---
+
+## File Structure / 文件结构
+
+```
+market-making-sim/
+│
+├── PROJECT.md                ← 本文档 / this document
+│
+├── run_baseline.py           ← Phase 1 入口 / entry point
+│
+├── simulator/
+│   ├── __init__.py
+│   ├── data_gen.py               ← 价格数据生成 / synthetic price generator
+│   ├── baseline_mm.py            ← Phase 1: 基线做市商 / fixed-spread market maker
+│   ├── avellaneda_stoikov.py     ← Phase 2: AS 模型 / reservation price + dynamic spread
+│   └── visualize.py              ← 画图 / plotting utilities (baseline + AS + comparison)
+│
+├── run_baseline.py               ← Phase 1 入口
+├── run_as.py                     ← Phase 2 入口
+├── run_compare.py                ← Baseline vs AS 对比图
+├── run_phase3.py                 ← Phase 3 入口
+├── run_phase4.py                 ← Phase 4 入口
+│
+├── baseline_results.png          ← Phase 1 输出图
+├── as_results.png                ← Phase 2 输出图
+├── comparison_results.png        ← Phase 1 vs 2 对比图
+├── phase3_results.png            ← Phase 3 输出图
+├── phase4_results.png            ← Phase 4 输出图
+├── attribution_results.png       ← Phase 5 归因对比图（论文结论图）
+└── requirements.txt              ← numpy · pandas · matplotlib
+```
+
+---
+
+## Code Walkthrough / 代码说明
+
+### `simulator/data_gen.py` — 价格模拟器
+
+**EN:** Generates a synthetic BTC price path using **Geometric Brownian Motion (GBM)**. GBM is the standard model for asset prices: the log-return at each step is drawn from a normal distribution parameterised by drift `mu` and volatility `sigma`.
+
+**中文:** 用**几何布朗运动 (GBM)** 生成合成 BTC 价格路径。GBM 是资产价格的标准随机过程：每步对数收益率服从正态分布，由漂移率 `mu` 和波动率 `sigma` 参数化。
+
+**核心公式 / Key formula:**
+
+```
+log_return[t] = (μ - σ²/2) · dt  +  σ · √dt · Z[t]       Z ~ N(0,1)
+price[t]      = price[0] · exp( Σ log_return[1..t] )
+```
+
+**参数说明 / Parameters:**
+
+| 参数 | 默认值 | 含义 |
+|------|--------|------|
+| `S0` | 50,000 | 初始价格 / initial BTC price (USD) |
+| `mu` | 0.0 | 年化漂移率 / annualised drift |
+| `sigma` | 0.80 | 年化波动率 / annualised vol (80% is realistic for BTC) |
+| `n_steps` | 1440 | 时间步数 / number of bars (1440 = 1 day of 1-min bars) |
+| `seed` | 42 | 随机种子 / reproducibility seed |
+
+**每步价格标准差 / Per-step std dev:**
+```
+σ_step = 50,000 × 0.80 × √(1/(365×24×60)) ≈ $55 per minute
+```
+
+---
+
+### `simulator/baseline_mm.py` — 基线做市商
+
+**EN:** The core logic. At every timestep the maker posts two quotes symmetrically around the mid price. Fills arrive independently on each side with probability `prob_fill` — this models random uninformed order flow. The key design choice here is that **fill probability is independent of price direction**, so all inventory risk comes purely from holding positions while prices drift.
+
+**中文:** 核心逻辑。每个时间步，做市商在中间价两侧对称报价。每侧以概率 `prob_fill` 独立成交——模拟随机的非知情订单流。关键设计：**成交概率与价格方向无关**，因此所有库存风险纯粹来自持仓期间的价格漂移。
+
+**报价逻辑 / Quote logic:**
+```
+bid = mid_price - δ     (我们愿意买的价格 / we buy here)
+ask = mid_price + δ     (我们愿意卖的价格 / we sell here)
+```
+
+**P&L 分解 / P&L decomposition:**
+
+```
+MtM P&L      = cash + inventory × mid − initial_cash   ← 总收益
+Spread P&L   = δ × lot_size × total_fills              ← 价差收益（稳定正）
+Inventory P&L = MtM P&L − Spread P&L                  ← 方向性敞口（波动大）
+```
+
+**为什么这样拆 / Why this decomposition matters:**
+
+每次成交，无论买还是卖，我们都从价差里赚 δ。这是做市商的"稳定收益源"。  
+库存 P&L 则反映：持有仓位时价格走反了多少。基线策略不管库存，所以这一项完全不受控。AS 模型的目标就是让库存 P&L 接近零。
+
+*Every fill earns δ regardless of direction — that's the maker's structural edge. Inventory P&L captures the cost of holding an unhedged position. The baseline ignores inventory, so this term is uncontrolled. The AS model is designed to drive it toward zero.*
+
+**`Trade` dataclass:** records every fill with `timestamp`, `side`, `price`, `qty` — used for post-trade analysis in later phases.
+
+---
+
+### `simulator/visualize.py` — 可视化
+
+**EN:** Produces a 3-panel figure using matplotlib:
+
+**中文:** 用 matplotlib 生成三格图：
+
+| Panel | 内容 | 说明 |
+|-------|------|------|
+| 1 | Price + Quotes | 中间价、买一价、卖一价随时间变化 |
+| 2 | Inventory | 库存漂移；橙色=多头，蓝色=空头；基线不回归是核心缺陷 |
+| 3 | P&L Decomposition | 紫色=总 MtM，绿虚线=价差收益，红点线=库存收益 |
+
+Panel 3 is the most important for the capstone narrative: it shows how spread P&L grows steadily while inventory P&L fluctuates wildly — motivating every subsequent improvement.
+
+Panel 3 是毕业论文叙事中最重要的图：价差收益稳定增长，库存收益剧烈波动，这直接引出后续每一步改进的动机。
+
+---
+
+### `run_baseline.py` — 运行入口
+
+**EN:** CLI wrapper. Parses arguments, calls `generate_btc_price` → `BaselineMarketMaker.run` → `plot_simulation`, prints a summary table, and saves `baseline_results.png`.
+
+**中文:** 命令行入口。解析参数，依次调用价格生成 → 做市商模拟 → 画图，打印汇总表，保存结果图。
+
+**常用命令 / Common commands:**
+
+```bash
+# 默认运行 / default run
+python run_baseline.py
+
+# 换个随机路径看看 / try a different random path
+python run_baseline.py --seed 7
+
+# 更紧的价差，测试成交率影响 / tighter spread
+python run_baseline.py --delta 25
+
+# 加入上涨趋势，展示库存爆仓 / add upward drift to show inventory blowup
+python run_baseline.py --mu 0.5
+
+# 只保存图片不弹窗 / save PNG without opening window
+python run_baseline.py --no-show
+```
+
+**所有参数 / All arguments:**
+
+| 参数 | 默认 | 含义 |
+|------|------|------|
+| `--S0` | 50000 | 初始价格 |
+| `--mu` | 0.0 | 年化漂移率 |
+| `--sigma` | 0.80 | 年化波动率 |
+| `--n-steps` | 1440 | 时间步数 |
+| `--delta` | 50.0 | 单侧价差 (USD) |
+| `--lot-size` | 0.01 | 每次成交 BTC 数量 |
+| `--prob-fill` | 0.30 | 每侧每步成交概率 |
+| `--seed` | 42 | 随机种子 |
+| `--no-show` | False | 不弹图窗，只存文件 |
+
+---
+
+### `simulator/avellaneda_stoikov.py` — AS 模型
+
+**EN:** The AS model replaces the fixed symmetric quote with two improvements:
+
+**中文:** AS 模型用两个改进替换掉固定对称报价：
+
+**① 保留价格 / Reservation price**
+
+```
+r = mid − gamma × q × tau
+```
+
+- `q` = 当前库存（BTC）
+- `tau` = 剩余时间占比 τ ∈ [0, 1]
+- `gamma` = 风险厌恶系数（$/BTC），默认 50
+
+持多头（q > 0）→ r < mid → 卖价靠近中间价 → 更容易成交 → 库存主动回归零  
+持空头（q < 0）→ r > mid → 买价靠近中间价 → 更容易成交 → 库存主动回归零
+
+**② 动态价差 / Time-decaying spread**
+
+```
+delta(tau) = delta_0 × tau + delta_min
+```
+
+开盘时 δ≈$50（和基线相同），收盘前收窄到 $5——临近结束时做市商接受更低利润来尽快平仓。
+
+**③ 成交概率响应报价位置 / Fill probability responds to quote placement**
+
+```
+p_fill = prob_fill × exp(k × (delta(tau) − |quote_dist_from_mid|))
+```
+
+- 报价比当前价差更靠近中间价：p > prob_fill（更容易成交）
+- 报价比当前价差更远：p < prob_fill（更难成交）
+- 库存为零时报价对称：p = prob_fill（和基线完全一样）
+
+这第三点是 AS 模型能让库存回归的真正原因——不是报价位置本身，而是报价位置改变了两侧的成交概率，让卖出比买入更容易发生（当持多时）。
+
+*This third mechanism is what actually drives inventory mean-reversion: the skewed quotes create an asymmetry in fill rates that systematically pushes inventory back toward zero.*
+
+**参数说明 / Parameters:**
+
+| 参数 | 默认 | 含义 |
+|------|------|------|
+| `gamma` | 50.0 | $/BTC：每 BTC 库存在 τ=1 时的报价偏移量 |
+| `delta_0` | 45.0 | 开盘时额外价差（加上 delta_min = $50 总计） |
+| `delta_min` | 5.0 | 收盘前最低价差 |
+| `T` | 1440 | 总步数（会话长度） |
+| `fill_k` | 0.024 | 成交概率对距离的敏感度（1/$） |
+
+**常用命令 / Common commands:**
+
+```bash
+python run_as.py                        # 默认运行
+python run_as.py --seed 7               # 换个路径
+python run_as.py --gamma 100            # 更激进的库存偏移
+python run_compare.py                   # Baseline vs AS 对比
+python run_compare.py --mu 0.5          # 上涨趋势下的对比（基线占优）
+python run_compare.py --mu -0.5         # 下跌趋势下的对比（AS 占优）
+```
+
+---
+
+## Key Concepts / 核心概念
+
+### 什么是做市商 / What is a Market Maker?
+
+做市商同时在买卖两侧挂单，赚取买卖价差。它不预测价格方向，而是通过高频双边成交积累利润。风险在于：如果库存在价格不利方向积累，方向性亏损会超过价差收益。
+
+*A market maker posts both a bid and an ask simultaneously, earning the spread on each round trip. It does not predict direction — it profits from high-frequency two-sided flow. The risk: if inventory accumulates while the price moves adversely, directional losses exceed spread gains.*
+
+### 为什么选 BTC / Why BTC?
+
+- 24/7 交易，没有开收盘跳空 / No overnight gaps
+- 波动率高（~80%/yr），库存风险极其显著 / High vol makes inventory risk obvious immediately
+- 价差宽，做市利润直观 / Wide spreads make P&L easier to understand
+- 数据容易获取 / Data readily available
+
+### 基线策略的核心缺陷 / Why the Baseline Fails
+
+1. **库存不回归 / No inventory mean-reversion** — 报价始终对称，不会因为持仓多就把买价降低来吸引对手方。
+2. **价差固定 / Fixed spread** — 市场剧烈波动时也不加宽，逆向选择损失放大。
+3. **无风险控制 / No risk controls** — 库存可以无限累积。
+
+这三点对应后续三个改进阶段，是毕业论文的论证主线。
+
+*These three failure modes map directly onto the next three improvement phases — they are the narrative backbone of the capstone.*
+
+---
+
+## What's Next / 下一步
+
+**全部五个阶段已完成。**
+
+项目可以直接作为毕设提交，也可以继续扩展：
+- 接入 Lumid 平台真实 BTC 数据替换 GBM 模拟
+- 加入 VPIN 替代简单毒性分数
+- 多品种对冲（BTC + ETH 同时做市）
+
+---
+
+## Known Limitations / 已知局限性
+
+代码审查后发现的设计问题，供论文写作参考。
+
+**1. Phase 2 与 Phase 3/4 的成交模型不一致**
+
+- Phase 2 用相对衰减：`p = prob_fill × exp(k × (delta(τ) − dist))`，以当前价差为参考
+- Phase 3/4 用绝对衰减：`p = exp(−k × dist)`，以固定 $50 为参考
+
+直接影响：会话中段价差收窄后，Phase 3/4 的成交率高于 Phase 2（即便库存为零）。这意味着 Phase 2 → Phase 3 的 P&L 改善中有一部分来自成交模型变化，不完全是毒性检测的功劳。论文中应注明。
+
+**2. tau 对 BTC 24/7 的适用性**
+
+Reservation price 和价差公式仍使用 `tau`（会话剩余比例）。在单次模拟（1440步=1天）中合理，但若做市商持续运行多天，需要将 tau 改为滚动窗口重置机制，否则价差永远接近最小值。
+
+**3. Spread P&L 是近似值**
+
+每笔成交的价差收益记录为 `delta × lot_size`，忽略了 reservation price 与 mid 偏差带来的影响。实际上买入时的价差收益和卖出时略有不同。在库存小的情况下误差可忽略。
+
+**4. 毒性检测滞后**
+
+滚动窗口（默认30步）只能在知情流已经持续一段时间后才能检测到。理论上前30步内已经受到了完整的逆向选择损失，保护措施才刚刚启动。
+
+---
+
+*This document is updated manually at the end of each phase. / 本文档在每个阶段结束后手动更新。*
