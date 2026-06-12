@@ -75,3 +75,52 @@ def fetch_btc_price(
     timestamps = [pd.Timestamp(b[0], unit="ms", tz="UTC") for b in bars[:n_steps]]
 
     return pd.Series(closes, index=timestamps, name="mid_price")
+
+
+def fetch_btc_ohlcv(
+    date: str = None,
+    n_steps: int = 1440,
+    symbol: str = "BTCUSDT",
+) -> pd.DataFrame:
+    """
+    Same as fetch_btc_price but returns full OHLCV DataFrame.
+    Columns: open, high, low, close, volume
+    """
+    if date is not None:
+        start_dt = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        start_ms = int(start_dt.timestamp() * 1000)
+    else:
+        start_ms = int((datetime.now(timezone.utc) - timedelta(minutes=n_steps)).timestamp() * 1000)
+
+    bars = []
+    current_start = start_ms
+
+    while len(bars) < n_steps:
+        remaining = n_steps - len(bars)
+        limit = min(remaining, MAX_PER_REQUEST)
+        resp = requests.get(
+            BINANCE_URL,
+            params={"symbol": symbol, "interval": "1m",
+                    "startTime": current_start, "limit": limit},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            break
+        bars.extend(data)
+        current_start = data[-1][6] + 1
+        if len(data) < limit:
+            break
+
+    timestamps = [pd.Timestamp(b[0], unit="ms", tz="UTC") for b in bars[:n_steps]]
+    return pd.DataFrame(
+        {
+            "open":   [float(b[1]) for b in bars[:n_steps]],
+            "high":   [float(b[2]) for b in bars[:n_steps]],
+            "low":    [float(b[3]) for b in bars[:n_steps]],
+            "close":  [float(b[4]) for b in bars[:n_steps]],
+            "volume": [float(b[5]) for b in bars[:n_steps]],
+        },
+        index=timestamps,
+    )

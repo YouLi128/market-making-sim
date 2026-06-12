@@ -89,12 +89,13 @@ class AdverseSelectionMM:
         return float(abs(up_frac - 0.5) * 2)   # 0 = random, 1 = all one direction
 
     # ------------------------------------------------------------------
-    def step(self, timestamp: pd.Timestamp, mid: float) -> dict:
+    def step(self, timestamp: pd.Timestamp, mid: float,
+             toxicity_override: float = None) -> dict:
         self._mid_history.append(mid)
         tau = self._tau()
         self._step += 1
 
-        toxicity = self._toxicity_score()
+        toxicity = toxicity_override if toxicity_override is not None else self._toxicity_score()
 
         r = mid - self.gamma * self.inventory * tau
 
