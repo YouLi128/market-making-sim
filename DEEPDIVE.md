@@ -5,17 +5,11 @@
 
 ---
 
-## 1. 接入真实数据 / Real Data Integration
+## ~~1. 接入真实数据 / Real Data Integration~~ ✅ 已完成
 
-**现状：** 价格全部用 GBM 模拟，和真实市场行为差距较大。
-
-**可以做：**
-- 接入 Lumid 平台 BTC 实时数据
-- 或用 Binance 公开 API 拉历史分钟数据（免费）
-
-**价值：** 真实数据有跳空、fat tail、非对称波动，会暴露模型在 GBM 下隐藏的问题，论文说服力大幅提升。
-
-**难度：** ⭐⭐（主要是数据清洗）
+Binance 公开 API，BTC/USDT 1分钟数据，支持指定日期或拉最近 N 天。
+7天真实数据回测：四个模型全部每天盈利，Phase 4 七天总 P&L +$2,963。
+详见 `simulator/data_loader.py`、`run_real_data.py`、`run_realdata_backtest.py`。
 
 ---
 
