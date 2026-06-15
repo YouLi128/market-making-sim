@@ -1,8 +1,8 @@
 # Market Making Simulator — NUS MComp GT Capstone
 # 做市商模拟器 — NUS 计算机硕士毕业项目
 
-> **Last updated / 最后更新:** 2026-06-11 (Monte Carlo backtest added)  
-> **Stack / 技术栈:** Python · pandas · numpy · matplotlib  
+> **Last updated / 最后更新:** 2026-06-15 (VPIN + GARCH added)  
+> **Stack / 技术栈:** Python · pandas · numpy · matplotlib · requests · arch  
 > **GitHub:** https://github.com/YouLi128/market-making-sim
 
 ---
@@ -25,10 +25,21 @@
 | **4** | 风险控制 | Inventory hard limits · volatility regime switching | ✅ Done |
 | **5** | P&L 归因分析 | Decompose P&L → spread capture / inventory risk / adverse selection loss | ✅ Done |
 | **6** | Monte Carlo 回测 | 500 条路径统计验证，Sharpe ratio 对比 | ✅ Done |
+| **7** | 真实数据接入 | Binance API · 7天真实 BTC 回测 | ✅ Done |
+| **8** | VPIN 逆向选择 | 成交量同步毒性检测，替换简单价格方向法 | ✅ Done |
+| **9** | GARCH 动态波动率 | GARCH(1,1) 实时预测 σ，动态更新 AS 公式参数 | ✅ Done |
 
 ---
 
 ## Progress Log / 进度记录
+
+### 2026-06-15 — VPIN + GARCH Complete
+
+**EN:** Two signal upgrades added on top of the existing pipeline. (1) VPIN replaces the simple rolling up-fraction toxicity score — uses Bulk Volume Classification to estimate buy/sell volume per bar, accumulates into fixed-size buckets, and computes rolling |OI|/V as the toxicity signal. On real data: inventory std reduced 0.067→0.058, P&L improved +$333→+$389. (2) GARCH(1,1) replaces the fixed σ=0.80 in the AS reservation price and spread formulas — fits on the full price series, then scales gamma and delta_0 by vol_ratio = σ_garch/σ_baseline at each step. Known limitation: GARCH is lagged on sudden jumps, performing worse on gap-up/down days but better over multi-day periods.
+
+**中文:** 两个信号升级。(1) VPIN 替换简单价格方向毒性——BVC 估算每根 K 线买卖量，固定大小 bucket 积累，滚动 |OI|/V 作为毒性分数。真实数据：库存标准差 0.067→0.058，P&L +$333→+$389。(2) GARCH(1,1) 替换 AS 公式里的固定 σ——拟合整段价格序列，每步用 vol_ratio = σ_garch/σ_baseline 缩放 gamma 和 delta_0。已知局限：GARCH 对突发跳空滞后，跳空当天不如固定 σ，但多日累积表现更稳定。
+
+---
 
 ### 2026-06-11 — Monte Carlo Backtest Complete
 
@@ -89,10 +100,15 @@ market-making-sim/
 │
 ├── simulator/
 │   ├── __init__.py
-│   ├── data_gen.py               ← 价格数据生成 / synthetic price generator
-│   ├── baseline_mm.py            ← Phase 1: 基线做市商 / fixed-spread market maker
-│   ├── avellaneda_stoikov.py     ← Phase 2: AS 模型 / reservation price + dynamic spread
-│   └── visualize.py              ← 画图 / plotting utilities (baseline + AS + comparison)
+│   ├── data_gen.py               ← 合成价格生成 (GBM + regime-switching)
+│   ├── data_loader.py            ← Binance API 真实数据 (price + OHLCV)
+│   ├── baseline_mm.py            ← Phase 1: 固定价差做市商
+│   ├── avellaneda_stoikov.py     ← Phase 2: AS 模型 (支持 GARCH sigma 注入)
+│   ├── adverse_selection.py      ← Phase 3: 简单毒性检测 (支持外部信号覆盖)
+│   ├── risk_controls.py          ← Phase 4: 风险控制三层保护
+│   ├── vpin.py                   ← Phase 8: VPIN 成交量毒性检测
+│   ├── garch.py                  ← Phase 9: GARCH(1,1) 条件波动率
+│   └── visualize.py              ← 所有画图函数
 │
 ├── run_baseline.py               ← Phase 1 入口
 ├── run_as.py                     ← Phase 2 入口
@@ -107,7 +123,15 @@ market-making-sim/
 ├── phase4_results.png            ← Phase 4 输出图
 ├── attribution_results.png       ← Phase 5 归因对比图（论文结论图）
 ├── montecarlo_results.png        ← Monte Carlo 500条路径统计分布图
-├── run_montecarlo.py             ← Monte Carlo 入口
+├── real_data_results.png         ← 真实数据单日运行图
+├── realdata_backtest.png         ← 7天真实数据回测图
+├── vpin_results.png              ← VPIN vs 简单毒性对比图
+├── garch_results.png             ← GARCH vs 固定 σ 对比图
+├── run_montecarlo.py             ← Phase 6 Monte Carlo 入口
+├── run_real_data.py              ← Phase 7 真实数据单日
+├── run_realdata_backtest.py      ← Phase 7 多日回测
+├── run_vpin.py                   ← Phase 8 VPIN 入口
+├── run_garch.py                  ← Phase 9 GARCH 入口
 └── requirements.txt              ← numpy · pandas · matplotlib
 ```
 
