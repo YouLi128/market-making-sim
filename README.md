@@ -2,7 +2,7 @@
 
 **NUS MComp General Track Capstone Project**
 
-A Python simulator that builds a market maker from scratch on synthetic BTC price data, progressively improving from a naive fixed-spread baseline to a full risk-controlled Avellaneda-Stoikov model.
+A Python simulator that builds a market maker from scratch on real and synthetic BTC price data, progressively improving from a naive fixed-spread baseline to a full risk-controlled Avellaneda-Stoikov model — with VPIN adverse selection detection and GARCH(1,1) dynamic volatility.
 
 ---
 
@@ -14,7 +14,7 @@ This project demonstrates — step by step — how each model improvement addres
 
 ---
 
-## Five-Phase Progression
+## Progression
 
 | Phase | Model | Key Idea | Weakness Fixed |
 |-------|-------|----------|----------------|
@@ -23,6 +23,10 @@ This project demonstrates — step by step — how each model improvement addres
 | 3 | Adverse Selection | Toxicity score widens spread when informed flow detected | Adverse selection loss |
 | 4 | Risk Controls | Hard inventory cap + vol regime + emergency liquidation | Unbounded risk |
 | 5 | Attribution | All models compared on the same price path | — |
+| 6 | Monte Carlo | 500-path statistical validation, cross-path Sharpe ratio | Single-path luck |
+| 7 | Real Data | Binance API — real BTC/USDT 1-min data, 7-day backtest | Simulation assumptions |
+| 8 | VPIN | Volume-synchronized toxicity detection (Easley et al. 2012) | Price-only toxicity |
+| 9 | GARCH | GARCH(1,1) dynamic sigma replaces fixed vol in AS formula | Constant volatility |
 
 ---
 
@@ -57,6 +61,11 @@ python run_compare.py           # Phase 1 vs 2 comparison
 python run_phase3.py            # Phase 3
 python run_phase4.py            # Phase 4
 python run_attribution.py       # Phase 5 — all models
+python run_montecarlo.py        # Phase 6 — 500-path Monte Carlo
+python run_real_data.py         # Phase 7 — real BTC data (latest day)
+python run_realdata_backtest.py # Phase 7 — 7-day real data backtest
+python run_vpin.py              # Phase 8 — VPIN vs simple toxicity
+python run_garch.py             # Phase 9 — GARCH dynamic vol
 ```
 
 Each script saves a `.png` plot and prints a summary table to the console.

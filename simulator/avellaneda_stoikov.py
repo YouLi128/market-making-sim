@@ -56,12 +56,14 @@ class AvellanedaStoikov:
         delta_min: float = 5.0,   # minimum half-spread at session end
         T: int = 1440,            # total session steps
         lot_size: float = 0.01,
-        prob_fill: float = 0.30,  # fill prob when quote is exactly delta(tau) from mid
-        fill_k: float = 0.024,    # fill decay per $: calibrated at prob_fill=0.30 @ dist=$50
+        prob_fill: float = 0.30,
+        fill_k: float = 0.024,
+        baseline_sigma: float = 0.80,  # reference vol used during calibration
         initial_cash: float = 100_000.0,
         seed: int = 0,
     ):
         self.gamma = gamma
+        self.baseline_sigma = baseline_sigma
         self.delta_0 = delta_0
         self.delta_min = delta_min
         self.T = T
@@ -143,6 +145,24 @@ class AvellanedaStoikov:
     # ------------------------------------------------------------------
     def run(self, prices: pd.Series) -> pd.DataFrame:
         records = [self.step(ts, p) for ts, p in prices.items()]
+        return pd.DataFrame(records, index=prices.index)
+
+    def run_garch(self, prices: pd.Series, sigma_series: pd.Series) -> pd.DataFrame:
+        """Run with GARCH-estimated sigma at each step."""
+        sigma_aligned = sigma_series.reindex(prices.index).ffill().fillna(self.baseline_sigma)
+        records = []
+        for ts, p in prices.items():
+            sigma_t   = float(sigma_aligned.loc[ts])
+            vol_ratio = sigma_t / self.baseline_sigma
+            # Scale gamma and delta_0 by vol ratio so model responds to vol clustering
+            orig_gamma, orig_delta_0 = self.gamma, self.delta_0
+            self.gamma   = orig_gamma   * vol_ratio
+            self.delta_0 = orig_delta_0 * vol_ratio
+            rec = self.step(ts, p)
+            rec["garch_sigma"] = sigma_t
+            rec["vol_ratio"]   = vol_ratio
+            self.gamma, self.delta_0 = orig_gamma, orig_delta_0
+            records.append(rec)
         return pd.DataFrame(records, index=prices.index)
 
     # ------------------------------------------------------------------
