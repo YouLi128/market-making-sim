@@ -7,11 +7,15 @@ Usage:
     prices = fetch_btc_price(date="2024-06-01")  # specific date
 """
 
+import os
 import time
 from datetime import datetime, timedelta, timezone
+from typing import List
 
 import pandas as pd
 import requests
+
+CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", "data_cache")
 
 BINANCE_URL = "https://api.binance.com/api/v3/klines"
 MAX_PER_REQUEST = 1000  # Binance hard limit per request
@@ -75,6 +79,58 @@ def fetch_btc_price(
     timestamps = [pd.Timestamp(b[0], unit="ms", tz="UTC") for b in bars[:n_steps]]
 
     return pd.Series(closes, index=timestamps, name="mid_price")
+
+
+def fetch_historical_days(
+    n_days: int = 90,
+    end_date: str = None,
+    symbol: str = "BTCUSDT",
+    min_bars: int = 1200,
+) -> List[pd.Series]:
+    """
+    Fetch n_days of 1-minute close prices, one pd.Series per calendar day.
+    Results are cached locally in data_cache/ so subsequent runs are instant.
+
+    Args:
+        n_days   : number of calendar days to fetch (default 90 = ~3 months)
+        end_date : "YYYY-MM-DD" last day to include, default = yesterday
+        min_bars : skip days with fewer bars (e.g. exchange downtime)
+
+    Returns:
+        List of pd.Series, each being one day of 1-minute prices.
+    """
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+    if end_date is None:
+        end_dt = datetime.now(timezone.utc).date() - timedelta(days=1)
+    else:
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    days: List[pd.Series] = []
+
+    for i in range(n_days, 0, -1):
+        date = end_dt - timedelta(days=i - 1)
+        date_str = date.strftime("%Y-%m-%d")
+        cache_path = os.path.join(CACHE_DIR, f"{symbol}_{date_str}.csv")
+
+        # Load from cache if available
+        if os.path.exists(cache_path):
+            df = pd.read_csv(cache_path, index_col=0, parse_dates=True)
+            prices = df["mid_price"]
+        else:
+            try:
+                prices = fetch_btc_price(date=date_str, n_steps=1440, symbol=symbol)
+                if len(prices) >= min_bars:
+                    prices.to_frame().to_csv(cache_path)
+                time.sleep(0.1)   # gentle rate limiting
+            except Exception as e:
+                print(f"  [skip] {date_str}: {e}")
+                continue
+
+        if len(prices) >= min_bars:
+            days.append(prices)
+
+    return days
 
 
 def fetch_btc_ohlcv(
