@@ -1,7 +1,7 @@
 # Market Making Simulator — NUS MComp GT Capstone
 # 做市商模拟器 — NUS 计算机硕士毕业项目
 
-> **Last updated / 最后更新:** 2026-06-15 (VPIN + GARCH added)  
+> **Last updated / 最后更新:** 2026-06-16 (Exact AS added)  
 > **Stack / 技术栈:** Python · pandas · numpy · matplotlib · requests · arch  
 > **GitHub:** https://github.com/YouLi128/market-making-sim
 
@@ -28,10 +28,19 @@
 | **7** | 真实数据接入 | Binance API · 7天真实 BTC 回测 | ✅ Done |
 | **8** | VPIN 逆向选择 | 成交量同步毒性检测，替换简单价格方向法 | ✅ Done |
 | **9** | GARCH 动态波动率 | GARCH(1,1) 实时预测 σ，动态更新 AS 公式参数 | ✅ Done |
+| **10** | 精确 AS 公式 | 原论文公式 + 解析标定，对标 Avellaneda & Stoikov (2008) | ✅ Done |
 
 ---
 
 ## Progress Log / 进度记录
+
+### 2026-06-16 — Exact AS Formula Complete
+
+**EN:** Implemented the original Avellaneda-Stoikov (2008) formulas without simplification, with an analytical calibration method that solves for (γ, κ) given two intuitive targets: target half-spread at session start and target reservation price skew at mid-session. σ is estimated from real BTC price data per-step. Key difference from simplified AS: fill probability = exp(-κ·dist) with κ=0.040 gives 13.5% fill rate at $50 distance vs simplified model's ~30%. Result: exact AS trades less (677 vs 857 fills) but earns similar spread P&L with tighter inventory control. The `calibrate_as_params()` function makes the model fully parameter-free given human-interpretable targets.
+
+**中文:** 实现原始 AS 论文公式，并提供解析标定函数 `calibrate_as_params()`——给定直观的目标价差和目标库存偏移，自动解出 (γ, κ)，无需手动调参。σ 从真实 BTC 数据估算（实现波动率，$/√step）。与简化版 AS 的核心区别：成交概率 = exp(-κ·dist)，κ=0.040，$50 处成交率 13.5%（简化版约 30%）。精确版成交次数更少但价差收益相当，库存控制更紧。
+
+---
 
 ### 2026-06-15 — VPIN + GARCH Complete
 
