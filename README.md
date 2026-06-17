@@ -39,7 +39,7 @@ This project demonstrates — step by step — how each model improvement addres
 | Model | Spread P&L | Inventory P&L | Total P&L | Max Drawdown | Inv Std Dev |
 |-------|-----------|---------------|-----------|-------------|-------------|
 | Phase 1: Baseline | +$432 | −$52 | +$380 | $0 | 0.100 BTC |
-| Phase 2: AS | +$237 | +$0 | +$237 | −$2 | 0.056 BTC |
+| Phase 2: AS | +$367 | −$79 | +$289 | −$18 | 0.043 BTC |
 | Phase 3: Adverse Selection | +$376 | −$68 | +$309 | −$29 | 0.046 BTC |
 | Phase 4: Risk Controls | +$372 | −$17 | **+$355** | −$20 | **0.036 BTC** |
 
