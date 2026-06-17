@@ -12,13 +12,12 @@ Two key improvements over the baseline:
        delta(tau) = delta_0 * tau + delta_min
    Near end of session the maker accepts tighter margins to flatten inventory.
 
-Fill model (key difference from baseline):
-   Fill probability decays exponentially with distance from mid.
-   This is what actually creates inventory mean-reversion:
-       p_fill = prob_fill * exp(k * (delta(tau) - |quote_dist_from_mid|))
-   When quote is closer to mid than delta(tau): p > prob_fill  (fills more)
-   When quote is further from mid:              p < prob_fill  (fills less)
-   When inventory=0 (symmetric quotes):         p = prob_fill  (same as baseline)
+Fill model:
+   Fill probability decays exponentially with absolute distance from mid.
+   This is consistent with Phase 3/4 and the original AS paper:
+       p_fill = exp(-fill_k * |quote_dist_from_mid|)
+   Calibrated so p_fill(dist=$50) ≈ 0.30, matching the baseline.
+   When inventory=0 (symmetric quotes): both sides fill at the same rate.
 
 Parameters:
    gamma     — $/BTC: how far the reservation price shifts per BTC of inventory
@@ -86,9 +85,9 @@ class AvellanedaStoikov:
     def _half_spread(self, tau: float) -> float:
         return self.delta_0 * tau + self.delta_min
 
-    def _fill_prob(self, delta: float, quote_dist: float) -> float:
-        """Fill probability given current half-spread and distance of quote from mid."""
-        return min(self.prob_fill * np.exp(self.fill_k * (delta - quote_dist)), 1.0)
+    def _fill_prob(self, quote_dist: float) -> float:
+        """Fill probability: absolute exponential decay from mid. exp(-k*dist) gives 0.30 at $50."""
+        return min(float(np.exp(-self.fill_k * quote_dist)), 1.0)
 
     # ------------------------------------------------------------------
     def step(self, timestamp: pd.Timestamp, mid: float) -> dict:
@@ -104,11 +103,9 @@ class AvellanedaStoikov:
         bid = r - delta
         ask = r + delta
 
-        # Fill probabilities respond to quote distance from mid
-        ask_dist = max(ask - mid, 0.0)
-        bid_dist = max(mid - bid, 0.0)
-        p_ask = self._fill_prob(delta, ask_dist)
-        p_bid = self._fill_prob(delta, bid_dist)
+        # Fill probabilities: absolute decay from mid, consistent with Phase 3/4
+        p_ask = self._fill_prob(max(ask - mid, 0.0))
+        p_bid = self._fill_prob(max(mid - bid, 0.0))
 
         bid_fill = self._rng.random() < p_bid
         ask_fill = self._rng.random() < p_ask
