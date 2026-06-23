@@ -65,6 +65,9 @@ class AdverseSelectionMM:
         self.inventory: float = 0.0
         self._step: int = 0
         self._cumulative_spread_pnl: float = 0.0
+        self._cumulative_inventory_pnl: float = 0.0
+        self._approx_spread_pnl: float = 0.0
+        self._prev_mid: float = 0.0
         self.trades: List[Trade] = []
         self._rng = np.random.default_rng(seed)
         self._mid_history: List[float] = []
@@ -91,6 +94,9 @@ class AdverseSelectionMM:
     # ------------------------------------------------------------------
     def step(self, timestamp: pd.Timestamp, mid: float,
              toxicity_override: float = None) -> dict:
+        # Exact inventory MTM from price move (before fills)
+        self._cumulative_inventory_pnl += self.inventory * (mid - self._prev_mid)
+
         self._mid_history.append(mid)
         tau = self._tau()
         self._step += 1
@@ -114,18 +120,20 @@ class AdverseSelectionMM:
         if bid_fill:
             self.cash -= bid * self.lot_size
             self.inventory += self.lot_size
+            self._cumulative_spread_pnl += (mid - bid) * self.lot_size
             self.trades.append(Trade(timestamp, "buy", bid, self.lot_size))
 
         if ask_fill:
             self.cash += ask * self.lot_size
             self.inventory -= self.lot_size
+            self._cumulative_spread_pnl += (ask - mid) * self.lot_size
             self.trades.append(Trade(timestamp, "sell", ask, self.lot_size))
 
         n_fills = int(bid_fill) + int(ask_fill)
-        self._cumulative_spread_pnl += delta_eff * self.lot_size * n_fills
+        self._approx_spread_pnl += delta_eff * self.lot_size * n_fills
 
+        self._prev_mid = mid
         mtm_pnl = self.cash + self.inventory * mid - self._initial_cash
-        inventory_pnl = mtm_pnl - self._cumulative_spread_pnl
 
         return {
             "mid_price": mid,
@@ -138,7 +146,8 @@ class AdverseSelectionMM:
             "inventory": self.inventory,
             "cash": self.cash,
             "spread_pnl": self._cumulative_spread_pnl,
-            "inventory_pnl": inventory_pnl,
+            "spread_pnl_approx": self._approx_spread_pnl,
+            "inventory_pnl": self._cumulative_inventory_pnl,
             "mtm_pnl": mtm_pnl,
         }
 

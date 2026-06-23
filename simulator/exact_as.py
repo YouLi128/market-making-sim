@@ -111,6 +111,9 @@ class ExactAvellanedaStoikov:
         self.inventory = 0.0
         self._step = 0
         self._cumulative_spread_pnl = 0.0
+        self._cumulative_inventory_pnl = 0.0
+        self._approx_spread_pnl = 0.0
+        self._prev_mid = 0.0
         self.trades: List[Trade] = []
         self._rng = np.random.default_rng(seed)
 
@@ -131,6 +134,9 @@ class ExactAvellanedaStoikov:
 
     # ------------------------------------------------------------------
     def step(self, timestamp: pd.Timestamp, mid: float) -> dict:
+        # Exact inventory MTM from price move (before fills)
+        self._cumulative_inventory_pnl += self.inventory * (mid - self._prev_mid)
+
         tau = self._tau()
         self._step += 1
 
@@ -148,30 +154,33 @@ class ExactAvellanedaStoikov:
         if bid_fill:
             self.cash -= bid * self.lot_size
             self.inventory += self.lot_size
+            self._cumulative_spread_pnl += (mid - bid) * self.lot_size
             self.trades.append(Trade(timestamp, "buy", bid, self.lot_size))
 
         if ask_fill:
             self.cash += ask * self.lot_size
             self.inventory -= self.lot_size
+            self._cumulative_spread_pnl += (ask - mid) * self.lot_size
             self.trades.append(Trade(timestamp, "sell", ask, self.lot_size))
 
         n_fills = int(bid_fill) + int(ask_fill)
-        self._cumulative_spread_pnl += delta * self.lot_size * n_fills
+        self._approx_spread_pnl += delta * self.lot_size * n_fills
 
-        mtm_pnl       = self.cash + self.inventory * mid - self._initial_cash
-        inventory_pnl = mtm_pnl - self._cumulative_spread_pnl
+        self._prev_mid = mid
+        mtm_pnl = self.cash + self.inventory * mid - self._initial_cash
 
         return {
-            "mid_price":         mid,
-            "reservation_price": r,
-            "bid":               bid,
-            "ask":               ask,
-            "half_spread":       delta,
-            "inventory":         self.inventory,
-            "cash":              self.cash,
-            "spread_pnl":        self._cumulative_spread_pnl,
-            "inventory_pnl":     inventory_pnl,
-            "mtm_pnl":           mtm_pnl,
+            "mid_price":          mid,
+            "reservation_price":  r,
+            "bid":                bid,
+            "ask":                ask,
+            "half_spread":        delta,
+            "inventory":          self.inventory,
+            "cash":               self.cash,
+            "spread_pnl":         self._cumulative_spread_pnl,
+            "spread_pnl_approx":  self._approx_spread_pnl,
+            "inventory_pnl":      self._cumulative_inventory_pnl,
+            "mtm_pnl":            mtm_pnl,
         }
 
     def run(self, prices: pd.Series) -> pd.DataFrame:

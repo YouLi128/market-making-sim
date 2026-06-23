@@ -451,6 +451,134 @@ def plot_attribution(
     return fig
 
 
+def plot_exact_attribution(
+    results: dict,
+    regimes: pd.Series,
+    title: str = "Phase 5+ — Exact P&L Attribution",
+) -> plt.Figure:
+    """
+    Three-panel comparison: exact vs approximate P&L decomposition.
+
+    Panel 1: Approximation error (exact - approx spread P&L) over time.
+    Panel 2: Exact spread P&L curves for all models.
+    Panel 3: Side-by-side bar chart — exact vs approx spread/inventory split.
+    """
+    COLORS = {
+        "Baseline": "grey",
+        "AS":       "steelblue",
+        "Phase3":   "darkorange",
+        "Phase4":   "firebrick",
+    }
+    LABELS = {
+        "Baseline": "Phase 1: Baseline",
+        "AS":       "Phase 2: AS",
+        "Phase3":   "Phase 3: Adverse Selection",
+        "Phase4":   "Phase 4: Risk Controls",
+    }
+
+    fig = plt.figure(figsize=(14, 13))
+    gs = gridspec.GridSpec(3, 1, hspace=0.48, top=0.93, bottom=0.06,
+                           height_ratios=[1.5, 2, 1.5])
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+    ax3 = fig.add_subplot(gs[2])
+
+    def shade_regimes(ax):
+        in_trend, start = False, None
+        for t, r in regimes.items():
+            if r == 1 and not in_trend:
+                in_trend, start = True, t
+            elif r == 0 and in_trend:
+                ax.axvspan(start, t, alpha=0.07, color="firebrick", zorder=0)
+                in_trend = False
+        if in_trend:
+            ax.axvspan(start, regimes.index[-1], alpha=0.07, color="firebrick", zorder=0)
+
+    # --- panel 1: approximation error over time --------------------------------
+    for name, df in results.items():
+        if "spread_pnl_approx" not in df.columns:
+            continue  # baseline: exact = approx, skip
+        error = df["spread_pnl"] - df["spread_pnl_approx"]
+        ax1.plot(df.index, error, color=COLORS[name], lw=1.1, label=LABELS[name])
+
+    ax1.axhline(0, color="black", lw=0.8, linestyle="--")
+    ax1.fill_between(results["AS"].index,
+                     results["AS"]["spread_pnl"] - results["AS"]["spread_pnl_approx"], 0,
+                     where=(results["AS"]["spread_pnl"] - results["AS"]["spread_pnl_approx"]) >= 0,
+                     alpha=0.10, color="steelblue")
+    ax1.fill_between(results["AS"].index,
+                     results["AS"]["spread_pnl"] - results["AS"]["spread_pnl_approx"], 0,
+                     where=(results["AS"]["spread_pnl"] - results["AS"]["spread_pnl_approx"]) < 0,
+                     alpha=0.10, color="firebrick")
+    shade_regimes(ax1)
+    ax1.set_ylabel("Error (USD)", fontsize=9)
+    ax1.set_title(
+        "Spread P&L error = exact − approx  (approx uses δ × lot × fills; exact uses mid − fill_price)",
+        fontsize=10,
+    )
+    ax1.legend(loc="lower left", fontsize=8, ncol=3)
+    ax1.grid(True, alpha=0.2)
+    ax1.tick_params(labelbottom=False)
+
+    # --- panel 2: exact spread P&L curves ------------------------------------
+    for name, df in results.items():
+        ax2.plot(df.index, df["spread_pnl"],
+                 color=COLORS[name], lw=1.1, label=f"{LABELS[name]} (exact)")
+        if "spread_pnl_approx" in df.columns:
+            ax2.plot(df.index, df["spread_pnl_approx"],
+                     color=COLORS[name], lw=0.7, linestyle=":", alpha=0.55,
+                     label=f"{LABELS[name]} (approx)")
+    shade_regimes(ax2)
+    ax2.set_ylabel("Cumulative Spread P&L (USD)", fontsize=9)
+    ax2.set_title("Spread P&L — solid=exact, dotted=approx  (Baseline: no difference)", fontsize=10)
+    ax2.legend(loc="upper left", fontsize=7.5, ncol=2)
+    ax2.grid(True, alpha=0.2)
+    ax2.tick_params(labelbottom=False)
+
+    # --- panel 3: exact vs approx decomposition bar chart --------------------
+    names  = list(results.keys())
+    x      = np.arange(len(names))
+    width  = 0.20
+
+    exact_spread  = [results[n]["spread_pnl"].iloc[-1]    for n in names]
+    approx_spread = [
+        results[n]["spread_pnl_approx"].iloc[-1]
+        if "spread_pnl_approx" in results[n].columns
+        else results[n]["spread_pnl"].iloc[-1]
+        for n in names
+    ]
+    exact_inv     = [results[n]["inventory_pnl"].iloc[-1] for n in names]
+    total_vals    = [results[n]["mtm_pnl"].iloc[-1]       for n in names]
+
+    ax3.bar(x - width * 1.5, exact_spread,  width, color="forestgreen", alpha=0.85, label="Spread P&L (exact)")
+    ax3.bar(x - width * 0.5, approx_spread, width, color="forestgreen", alpha=0.35, label="Spread P&L (approx)", hatch="//")
+    ax3.bar(x + width * 0.5, exact_inv,     width,
+            color=[("firebrick" if v < 0 else "steelblue") for v in exact_inv],
+            alpha=0.85, label="Inventory P&L (exact)")
+
+    for i, (es, ap, inv, tot) in enumerate(zip(exact_spread, approx_spread, exact_inv, total_vals)):
+        err = es - ap
+        ypos = max(es, max(inv, 0)) + 4
+        ax3.text(i, ypos,
+                 f"Total ${tot:+,.0f}\nErr {err:+,.1f}",
+                 ha="center", fontsize=7, fontweight="bold",
+                 color=COLORS[names[i]])
+
+    ax3.axhline(0, color="black", lw=0.6)
+    ax3.set_xticks(x)
+    ax3.set_xticklabels([LABELS[n] for n in names], fontsize=8)
+    ax3.set_ylabel("P&L (USD)", fontsize=9)
+    ax3.set_title(
+        "Exact vs Approx decomposition — dark green=exact, hatched=approx  (Err = exact − approx)",
+        fontsize=10,
+    )
+    ax3.legend(fontsize=8, loc="upper right")
+    ax3.grid(True, alpha=0.2, axis="y")
+
+    fig.suptitle(title, fontsize=13, fontweight="bold")
+    return fig
+
+
 def plot_montecarlo(
     stats: dict,
     n_paths: int,
