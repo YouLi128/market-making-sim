@@ -54,17 +54,22 @@ AS 系列模型新增 `spread_pnl_approx` 列供对比。详见 `run_exact_attri
 
 ---
 
-## 6. 多品种对冲 / Multi-Asset Extension
+## ~~6. 多品种对冲 / Multi-Asset Extension~~ ✅ 已完成
 
-**现状：** 只做 BTC 单品种做市。
+BTC + ETH 联合做市，使用组合方差梯度计算跨资产保留价格：
+```
+r_BTC = mid_BTC − γ·τ·(q_BTC·σ_BTC² + ρ·q_ETH·σ_BTC·σ_ETH)
+r_ETH = mid_ETH − γ·τ·(q_ETH·σ_ETH² + ρ·q_BTC·σ_BTC·σ_ETH)
+```
+交叉项含义：BTC 多 + ETH 空时两边偏移量都减弱（识别对冲，不急于平仓）；BTC 多 + ETH 也多时两边同时加速平仓（风险放大）。
 
-**可以做：** 同时做市 BTC + ETH，利用两者的相关性对冲库存
-- BTC 多头 + ETH 空头互相抵消部分方向性风险
-- 联合 reservation price 考虑跨品种相关系数
+对比两个独立单资产 AS 模型（ρ=0.85，seed=42）：
+- 组合风险 σ 降低 **23.2%**
+- BTC-ETH 库存相关性：多品种 **−0.875（对冲）** vs 独立 +0.947（同向漂移）
+- 总 MtM P&L：**+$710** vs +$284，最大回撤 **$0** vs −$48
 
-**价值：** 真实做市商（Wintermute、Jump）都是多品种同时运行的，展示这个维度很加分。
-
-**难度：** ⭐⭐⭐⭐
+详见 `simulator/multi_asset_mm.py`、`run_multi_asset.py`。
+参考：Avellaneda & Stoikov (2008) §5 — multi-asset extension。
 
 ---
 
@@ -85,8 +90,8 @@ AS 系列模型新增 `spread_pnl_approx` 列供对比。详见 `run_exact_attri
 | ~~⭐⭐ 高~~ | ~~GARCH 波动率~~ | ✅ 已完成 |
 | ~~⭐⭐⭐ 中~~ | ~~精确 P&L 归因~~ | ✅ 已完成 |
 | ~~⭐⭐⭐ 中~~ | ~~完整 AS 公式~~ | ✅ 已完成 |
-| ⭐⭐⭐⭐ 低 | 多品种对冲 | 工程量大，时间不够别做 |
+| ~~⭐⭐⭐⭐ 低~~ | ~~多品种对冲~~ | ✅ 已完成 |
 
 ---
 
-*全部计划方向已完成。唯一剩余扩展：多品种对冲（BTC + ETH）。*
+*全部 12 个阶段完成，项目可直接作为毕设提交。*
