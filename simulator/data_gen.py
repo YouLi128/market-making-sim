@@ -88,3 +88,42 @@ def generate_btc_price_regime(
         pd.Series(prices,  index=idx, name="mid_price"),
         pd.Series(regimes, index=idx, name="regime"),
     )
+
+
+def generate_correlated_btc_eth(
+    S0_btc: float = 50_000.0,
+    S0_eth: float = 3_000.0,
+    sigma_btc: float = 0.80,
+    sigma_eth: float = 1.20,
+    corr: float = 0.85,
+    mu_btc: float = 0.0,
+    mu_eth: float = 0.0,
+    n_steps: int = 1440,
+    dt_minutes: float = 1.0,
+    seed: int = 42,
+) -> tuple:
+    """
+    Correlated GBM price paths for BTC and ETH.
+
+    Uses Cholesky decomposition:
+        W_BTC = Z1
+        W_ETH = corr * Z1 + sqrt(1 - corr²) * Z2
+    so Cov(W_BTC, W_ETH) = corr * dt as required.
+
+    Returns (btc_prices, eth_prices) as pd.Series on a shared index.
+    """
+    rng = np.random.default_rng(seed)
+    dt_year = dt_minutes / (365.0 * 24.0 * 60.0)
+
+    Z1 = rng.standard_normal(n_steps)
+    Z2 = rng.standard_normal(n_steps)
+    W_btc = Z1
+    W_eth = corr * Z1 + np.sqrt(1.0 - corr ** 2) * Z2
+
+    lr_btc = (mu_btc - 0.5 * sigma_btc ** 2) * dt_year + sigma_btc * np.sqrt(dt_year) * W_btc
+    lr_eth = (mu_eth - 0.5 * sigma_eth ** 2) * dt_year + sigma_eth * np.sqrt(dt_year) * W_eth
+
+    idx = pd.date_range("2024-01-01", periods=n_steps, freq=f"{int(dt_minutes)}min")
+    btc = pd.Series(S0_btc * np.exp(np.cumsum(lr_btc)), index=idx, name="btc_mid")
+    eth = pd.Series(S0_eth * np.exp(np.cumsum(lr_eth)), index=idx, name="eth_mid")
+    return btc, eth

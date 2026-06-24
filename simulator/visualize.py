@@ -451,6 +451,135 @@ def plot_attribution(
     return fig
 
 
+def plot_multi_asset(
+    multi: pd.DataFrame,
+    indep_btc: pd.DataFrame,
+    indep_eth: pd.DataFrame,
+    corr: float = 0.85,
+    title: str = "Multi-Asset Market Making — BTC + ETH",
+) -> plt.Figure:
+    """
+    Four-panel comparison: multi-asset MM vs two independent single-asset AS models.
+
+    Panel 1: BTC inventory — multi vs independent
+    Panel 2: ETH inventory — multi vs independent
+    Panel 3: Portfolio variance over time — multi vs independent sum
+    Panel 4: Combined MtM P&L — multi vs independent sum
+    """
+    fig = plt.figure(figsize=(14, 14))
+    gs = gridspec.GridSpec(4, 1, hspace=0.45, top=0.93, bottom=0.05)
+    ax1 = fig.add_subplot(gs[0])
+    ax2 = fig.add_subplot(gs[1])
+    ax3 = fig.add_subplot(gs[2])
+    ax4 = fig.add_subplot(gs[3])
+
+    idx = multi.index
+
+    # --- panel 1: BTC inventory -------------------------------------------
+    ax1.plot(idx, multi["inv_btc"],     color="steelblue", lw=1.2, label="Multi-asset")
+    ax1.plot(idx, indep_btc["inventory"], color="grey", lw=1.0, linestyle="--",
+             alpha=0.8, label="Independent AS")
+    ax1.axhline(0, color="black", lw=0.6, linestyle="--")
+    ax1.fill_between(idx, multi["inv_btc"], 0,
+                     where=multi["inv_btc"] > 0, alpha=0.15, color="darkorange")
+    ax1.fill_between(idx, multi["inv_btc"], 0,
+                     where=multi["inv_btc"] < 0, alpha=0.15, color="steelblue")
+    b_std_m = multi["inv_btc"].std()
+    b_std_i = indep_btc["inventory"].std()
+    ax1.set_title(
+        f"BTC Inventory  — Multi std={b_std_m:.4f}  Indep std={b_std_i:.4f}  "
+        f"(reduction {(1-b_std_m/b_std_i)*100:.0f}%)",
+        fontsize=10,
+    )
+    ax1.set_ylabel("BTC", fontsize=9)
+    ax1.legend(loc="upper left", fontsize=8)
+    ax1.grid(True, alpha=0.2)
+    ax1.tick_params(labelbottom=False)
+
+    # --- panel 2: ETH inventory -------------------------------------------
+    ax2.plot(idx, multi["inv_eth"],     color="darkorange", lw=1.2, label="Multi-asset")
+    ax2.plot(idx, indep_eth["inventory"], color="grey", lw=1.0, linestyle="--",
+             alpha=0.8, label="Independent AS")
+    ax2.axhline(0, color="black", lw=0.6, linestyle="--")
+    ax2.fill_between(idx, multi["inv_eth"], 0,
+                     where=multi["inv_eth"] > 0, alpha=0.15, color="darkorange")
+    ax2.fill_between(idx, multi["inv_eth"], 0,
+                     where=multi["inv_eth"] < 0, alpha=0.15, color="steelblue")
+    e_std_m = multi["inv_eth"].std()
+    e_std_i = indep_eth["inventory"].std()
+    inv_corr = multi["inv_btc"].corr(multi["inv_eth"])
+    ax2.set_title(
+        f"ETH Inventory  — Multi std={e_std_m:.4f}  Indep std={e_std_i:.4f}  "
+        f"|  BTC-ETH inv corr (multi): {inv_corr:+.3f}",
+        fontsize=10,
+    )
+    ax2.set_ylabel("ETH", fontsize=9)
+    ax2.legend(loc="upper left", fontsize=8)
+    ax2.grid(True, alpha=0.2)
+    ax2.tick_params(labelbottom=False)
+
+    # --- panel 3: portfolio variance ------------------------------------
+    # Independent: compute combined variance with realized positions
+    dt_year = 1.0 / (365.0 * 24.0 * 60.0)
+    sigma_btc_abs = 50_000.0 * 0.80 * np.sqrt(dt_year)
+    sigma_eth_abs =  3_000.0 * 1.20 * np.sqrt(dt_year)
+
+    port_var_multi = multi["port_var"]
+    q_b_i = indep_btc["inventory"]
+    q_e_i = indep_eth["inventory"]
+    port_var_indep = (
+        (q_b_i * sigma_btc_abs) ** 2
+        + (q_e_i * sigma_eth_abs) ** 2
+        + 2 * corr * q_b_i * sigma_btc_abs * q_e_i * sigma_eth_abs
+    )
+
+    ax3.plot(idx, np.sqrt(port_var_multi), color="steelblue", lw=1.2,
+             label="Multi-asset (joint quotes)")
+    ax3.plot(idx, np.sqrt(port_var_indep), color="grey", lw=1.0, linestyle="--",
+             alpha=0.8, label="Independent AS (realized positions)")
+    ax3.fill_between(idx,
+                     np.sqrt(port_var_multi), np.sqrt(port_var_indep),
+                     where=np.sqrt(port_var_multi) <= np.sqrt(port_var_indep),
+                     alpha=0.15, color="steelblue", label="Multi-asset lower risk")
+    ax3.set_ylabel("Portfolio σ ($/√step)", fontsize=9)
+    pv_m = np.sqrt(port_var_multi).mean()
+    pv_i = np.sqrt(port_var_indep).mean()
+    ax3.set_title(
+        f"Portfolio Risk σ  — Multi avg={pv_m:.3f}  Indep avg={pv_i:.3f}  "
+        f"(reduction {(1-pv_m/pv_i)*100:.0f}%)",
+        fontsize=10,
+    )
+    ax3.legend(loc="upper left", fontsize=8)
+    ax3.grid(True, alpha=0.2)
+    ax3.tick_params(labelbottom=False)
+
+    # --- panel 4: combined P&L -------------------------------------------
+    indep_combined_pnl = indep_btc["mtm_pnl"] + indep_eth["mtm_pnl"]
+    ax4.plot(idx, multi["mtm_pnl"],      color="steelblue", lw=1.2,
+             label="Multi-asset MtM P&L")
+    ax4.plot(idx, indep_combined_pnl,    color="grey", lw=1.0, linestyle="--",
+             alpha=0.8, label="Independent AS (BTC + ETH combined)")
+    ax4.axhline(0, color="black", lw=0.6, linestyle="--")
+    ax4.fill_between(idx, multi["mtm_pnl"], indep_combined_pnl,
+                     where=multi["mtm_pnl"] >= indep_combined_pnl,
+                     alpha=0.12, color="steelblue", label="Multi-asset outperforms")
+    ax4.fill_between(idx, multi["mtm_pnl"], indep_combined_pnl,
+                     where=multi["mtm_pnl"] < indep_combined_pnl,
+                     alpha=0.12, color="firebrick", label="Independent outperforms")
+    ax4.set_ylabel("P&L (USD)", fontsize=9)
+    final_m = multi["mtm_pnl"].iloc[-1]
+    final_i = indep_combined_pnl.iloc[-1]
+    ax4.set_title(
+        f"Combined MtM P&L  — Multi ${final_m:+,.0f}   Independent ${final_i:+,.0f}",
+        fontsize=10,
+    )
+    ax4.legend(loc="upper left", fontsize=8, ncol=2)
+    ax4.grid(True, alpha=0.2)
+
+    fig.suptitle(title, fontsize=13, fontweight="bold")
+    return fig
+
+
 def plot_exact_attribution(
     results: dict,
     regimes: pd.Series,
