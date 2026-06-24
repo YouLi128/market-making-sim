@@ -1,7 +1,7 @@
 # Market Making Simulator — NUS MComp GT Capstone
 # 做市商模拟器 — NUS 计算机硕士毕业项目
 
-> **Last updated / 最后更新:** 2026-06-24 (Multi-asset BTC+ETH added)  
+> **Last updated / 最后更新:** 2026-06-24 (Time-varying ρ from real Binance data)  
 > **Stack / 技术栈:** Python · pandas · numpy · matplotlib · requests · arch  
 > **GitHub:** https://github.com/YouLi128/market-making-sim
 
@@ -30,11 +30,19 @@
 | **9** | GARCH 动态波动率 | GARCH(1,1) 实时预测 σ，动态更新 AS 公式参数 | ✅ Done |
 | **10** | 精确 AS 公式 | 原论文公式 + 解析标定，对标 Avellaneda & Stoikov (2008) | ✅ Done |
 | **11** | 精确 P&L 归因 | Per-fill exact decomposition · identity spread+inv==MtM verified | ✅ Done |
-| **12** | 多品种对冲 | BTC + ETH 联合做市 · 跨资产组合方差最小化 · 库存相关性 −0.875 | ✅ Done |
+| **12** | 多品种对冲 | BTC + ETH 联合做市 · 跨资产组合方差最小化 · 库存相关性 −0.875 · 时变 ρ（真实数据滚动估算） | ✅ Done |
 
 ---
 
 ## Progress Log / 进度记录
+
+### 2026-06-24 — Time-Varying ρ from Real Binance Data
+
+**EN:** Extended the multi-asset model to use real-time, time-varying correlation instead of a fixed scalar. `fetch_btc_eth_prices()` fetches aligned BTC+ETH 1-min close prices from Binance. Rolling 60-min Pearson ρ is computed from log returns and passed to `MultiAssetMM.run(corr_series=...)`, which mutates `self.corr` at every step. This means each step's reservation price uses the correlation actually observed in the most recent 60 minutes, not a hardcoded assumption. Results on latest 1440 bars: ρ fluctuates between 0.733 and 0.968 (mean 0.877), portfolio risk reduction jumps from 23.2% (synthetic, fixed ρ) to **37.2%** (real data, rolling ρ), max drawdown −$8 vs −$68 for independent AS. `plot_multi_asset()` gains an optional 5th panel visualising rolling ρ over time (shown when `corr_series` is provided). Run with `python run_multi_asset.py --real-data`.
+
+**中文:** 将多品种模型从固定 ρ 扩展为实时时变相关系数。`fetch_btc_eth_prices()` 从 Binance 拉取对齐的 BTC+ETH 1分钟收盘价，计算滚动 60 分钟 Pearson ρ，通过 `corr_series` 参数传入 `MultiAssetMM.run()`，每步实时更新 `self.corr`。每步保留价格使用的是最近 60 分钟实际观测到的相关结构，而非硬编码假设。最新 1440 根 K 线结果：ρ 在 0.733–0.968 之间波动（均值 0.877），组合风险降低从合成数据的 23.2% 提升至真实数据的 **37.2%**，最大回撤 −$8 vs 独立 AS 的 −$68。`plot_multi_asset()` 新增可选的第 5 个 panel 展示滚动 ρ 时序图（传入 `corr_series` 时自动显示）。新增文件：`simulator/data_loader.py::fetch_btc_eth_prices()`，输出图 `multi_asset_results_real.png`。
+
+---
 
 ### 2026-06-24 — Multi-Asset Market Making Complete (Phase 12)
 
@@ -126,7 +134,7 @@ market-making-sim/
 ├── simulator/
 │   ├── __init__.py
 │   ├── data_gen.py               ← 合成价格生成 (GBM + regime-switching)
-│   ├── data_loader.py            ← Binance API 真实数据 (price + OHLCV)
+│   ├── data_loader.py            ← Binance API 真实数据 (price + OHLCV + fetch_btc_eth_prices)
 │   ├── baseline_mm.py            ← Phase 1: 固定价差做市商
 │   ├── avellaneda_stoikov.py     ← Phase 2: AS 模型 (支持 GARCH sigma 注入)
 │   ├── adverse_selection.py      ← Phase 3: 简单毒性检测 (支持外部信号覆盖)
@@ -164,7 +172,8 @@ market-making-sim/
 ├── garch_results.png             ← GARCH vs 固定 σ 对比图
 ├── exact_as_results.png          ← Phase 10 精确 AS 输出图
 ├── exact_attribution_results.png ← Phase 11 精确归因对比图
-├── multi_asset_results.png       ← Phase 12 多品种对冲对比图
+├── multi_asset_results_seed42.png ← Phase 12 合成数据对比图 (ρ=0.85)
+├── multi_asset_results_real.png   ← Phase 12 真实数据 + 滚动 ρ 对比图
 └── requirements.txt              ← numpy · pandas · matplotlib
 ```
 
