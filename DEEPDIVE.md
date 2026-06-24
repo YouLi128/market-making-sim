@@ -44,19 +44,13 @@ Inventory P&L 更接近零（+$1.65 vs -$），最终 P&L +$240 vs +$188。
 
 ---
 
-## 5. P&L 归因精确化 / Exact P&L Attribution
+## ~~5. P&L 归因精确化 / Exact P&L Attribution~~ ✅ 已完成
 
-**现状：** Spread P&L 用 `delta × lot_size × n_fills` 近似，忽略了 reservation price 偏移的影响。
-
-**可以做：** 精确分解每笔成交的利润来源：
-```
-每次买入成交：spread_gain = mid_at_fill - bid_price
-每次卖出成交：spread_gain = ask_price - mid_at_fill
-inventory_gain = inventory × (mid_now - mid_prev)
-```
-这样 spread P&L 和 inventory P&L 的分界更精确，不再有近似误差。
-
-**难度：** ⭐⭐
+每笔成交精确归因：买单 `(mid − bid) × lot`，卖单 `(ask − mid) × lot`。
+库存 P&L 直接计算 `Σ inventory × Δmid`（不再用残差法）。
+恒等式 `spread_pnl + inventory_pnl == mtm_pnl` 对所有模型精确成立（误差 < $0.01）。
+Baseline 误差 $0；AS 误差约 −$0.81（−0.2%），因 reservation price 使 `mid − bid = δ + γ·q·τ ≠ δ`。
+AS 系列模型新增 `spread_pnl_approx` 列供对比。详见 `run_exact_attribution.py`。
 
 ---
 
@@ -85,15 +79,14 @@ inventory_gain = inventory × (mid_now - mid_prev)
 
 | 优先级 | 方向 | 理由 |
 |--------|------|------|
-| ⭐ 最高 | 接入真实数据 | 让整个项目脱离"玩具"层面 |
-| ⭐ 最高 | Monte Carlo 回测 | 结论有统计支撑，面试最硬 |
-| ⭐⭐ 高 | VPIN 毒性检测 | 有学术出处，替换简单方法 |
-| ⭐⭐ 高 | GARCH 波动率 | BTC 场景下效果明显 |
-| ⭐⭐⭐ 中 | 精确 P&L 归因 | 论文细节加分 |
-| ⭐⭐⭐ 中 | 完整 AS 公式 | 对标原始文献 |
-| ~~⭐⭐ 高~~ | ~~Monte Carlo 回测~~ | ✅ 已完成 |
+| ~~⭐ 最高~~ | ~~接入真实数据~~ | ✅ 已完成 |
+| ~~⭐ 最高~~ | ~~Monte Carlo 回测~~ | ✅ 已完成 |
+| ~~⭐⭐ 高~~ | ~~VPIN 毒性检测~~ | ✅ 已完成 |
+| ~~⭐⭐ 高~~ | ~~GARCH 波动率~~ | ✅ 已完成 |
+| ~~⭐⭐⭐ 中~~ | ~~精确 P&L 归因~~ | ✅ 已完成 |
+| ~~⭐⭐⭐ 中~~ | ~~完整 AS 公式~~ | ✅ 已完成 |
 | ⭐⭐⭐⭐ 低 | 多品种对冲 | 工程量大，时间不够别做 |
 
 ---
 
-*接下来优先：接入真实数据 + VPIN。*
+*全部计划方向已完成。唯一剩余扩展：多品种对冲（BTC + ETH）。*
