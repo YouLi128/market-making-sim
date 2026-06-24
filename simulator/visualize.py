@@ -456,24 +456,57 @@ def plot_multi_asset(
     indep_btc: pd.DataFrame,
     indep_eth: pd.DataFrame,
     corr: float = 0.85,
+    corr_series: pd.Series = None,
     title: str = "Multi-Asset Market Making — BTC + ETH",
 ) -> plt.Figure:
     """
-    Four-panel comparison: multi-asset MM vs two independent single-asset AS models.
+    Four or five-panel comparison: multi-asset MM vs two independent single-asset AS models.
 
-    Panel 1: BTC inventory — multi vs independent
-    Panel 2: ETH inventory — multi vs independent
-    Panel 3: Portfolio variance over time — multi vs independent sum
-    Panel 4: Combined MtM P&L — multi vs independent sum
+    Panel 1: Rolling ρ (only shown if corr_series provided)
+    Panel 2: BTC inventory — multi vs independent
+    Panel 3: ETH inventory — multi vs independent
+    Panel 4: Portfolio variance over time — multi vs independent sum
+    Panel 5: Combined MtM P&L — multi vs independent sum
     """
-    fig = plt.figure(figsize=(14, 14))
-    gs = gridspec.GridSpec(4, 1, hspace=0.45, top=0.93, bottom=0.05)
-    ax1 = fig.add_subplot(gs[0])
-    ax2 = fig.add_subplot(gs[1])
-    ax3 = fig.add_subplot(gs[2])
-    ax4 = fig.add_subplot(gs[3])
+    n_panels = 5 if corr_series is not None else 4
+    fig = plt.figure(figsize=(14, 4 * n_panels))
+    ratios = ([1] + [1.5] * 4) if corr_series is not None else ([1.5] * 4)
+    gs = gridspec.GridSpec(n_panels, 1, hspace=0.45, top=0.93, bottom=0.05,
+                           height_ratios=ratios)
+    axes = [fig.add_subplot(gs[i]) for i in range(n_panels)]
+
+    if corr_series is not None:
+        ax_corr = axes[0]
+        ax1, ax2, ax3, ax4 = axes[1], axes[2], axes[3], axes[4]
+    else:
+        ax_corr = None
+        ax1, ax2, ax3, ax4 = axes[0], axes[1], axes[2], axes[3]
 
     idx = multi.index
+
+    # --- panel 0: rolling ρ (only when corr_series provided) ----------------
+    if ax_corr is not None:
+        ax_corr.plot(corr_series.index, corr_series.values,
+                     color="mediumpurple", lw=1.2, label="Rolling 60-min ρ")
+        ax_corr.axhline(corr, color="grey", lw=0.8, linestyle="--",
+                        label=f"Fixed ρ={corr:.2f} (synthetic baseline)")
+        ax_corr.fill_between(corr_series.index, corr_series.values, corr,
+                             where=corr_series.values > corr,
+                             alpha=0.18, color="mediumpurple")
+        ax_corr.fill_between(corr_series.index, corr_series.values, corr,
+                             where=corr_series.values < corr,
+                             alpha=0.18, color="firebrick")
+        ax_corr.set_ylim(-1.05, 1.05)
+        ax_corr.axhline(0, color="black", lw=0.5, linestyle=":")
+        ax_corr.set_ylabel("ρ", fontsize=9)
+        avg_corr = float(corr_series.dropna().mean())
+        ax_corr.set_title(
+            f"BTC-ETH Rolling Correlation ρ  (60-min window, avg={avg_corr:.3f})",
+            fontsize=10,
+        )
+        ax_corr.legend(loc="upper right", fontsize=8)
+        ax_corr.grid(True, alpha=0.2)
+        ax_corr.tick_params(labelbottom=False)
 
     # --- panel 1: BTC inventory -------------------------------------------
     ax1.plot(idx, multi["inv_btc"],     color="steelblue", lw=1.2, label="Multi-asset")

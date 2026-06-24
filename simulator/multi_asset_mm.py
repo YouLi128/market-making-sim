@@ -259,11 +259,21 @@ class MultiAssetMM:
         }
 
     # ------------------------------------------------------------------
-    def run(self, btc_prices: pd.Series, eth_prices: pd.Series) -> pd.DataFrame:
-        records = [
-            self.step(ts, p_btc, p_eth)
-            for ts, p_btc, p_eth in zip(btc_prices.index, btc_prices, eth_prices)
-        ]
+    def run(
+        self,
+        btc_prices: pd.Series,
+        eth_prices: pd.Series,
+        corr_series: pd.Series = None,
+    ) -> pd.DataFrame:
+        """
+        Run the model. If corr_series is provided, ρ is updated at each step
+        from the series (time-varying correlation). Otherwise uses self.corr.
+        """
+        records = []
+        for ts, p_btc, p_eth in zip(btc_prices.index, btc_prices, eth_prices):
+            if corr_series is not None and ts in corr_series.index:
+                self.corr = float(corr_series.loc[ts])
+            records.append(self.step(ts, p_btc, p_eth))
         return pd.DataFrame(records, index=btc_prices.index)
 
     # ------------------------------------------------------------------

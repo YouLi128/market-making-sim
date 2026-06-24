@@ -13,9 +13,11 @@ patiently. Independent models ignore this and over-trade to reduce each asset's
 own inventory independently.
 
 Usage:
-    python run_multi_asset.py
+    python run_multi_asset.py                        # synthetic correlated GBM
+    python run_multi_asset.py --real-data            # real Binance data + rolling ρ
+    python run_multi_asset.py --real-data --date 2024-06-01
     python run_multi_asset.py --seed 7
-    python run_multi_asset.py --corr 0.60   # lower correlation
+    python run_multi_asset.py --corr 0.60            # lower correlation (synthetic only)
 """
 
 import argparse
@@ -23,6 +25,7 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from simulator.data_gen import generate_correlated_btc_eth
 from simulator.multi_asset_mm import MultiAssetMM
@@ -32,12 +35,19 @@ from simulator.visualize import plot_multi_asset
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--S0-btc",   type=float, default=50_000.0)
-    p.add_argument("--S0-eth",   type=float, default=3_000.0)
-    p.add_argument("--corr",     type=float, default=0.85)
-    p.add_argument("--n-steps",  type=int,   default=1440)
-    p.add_argument("--seed",     type=int,   default=42)
-    p.add_argument("--no-show",  action="store_true")
+    p.add_argument("--S0-btc",     type=float, default=50_000.0)
+    p.add_argument("--S0-eth",     type=float, default=3_000.0)
+    p.add_argument("--corr",       type=float, default=0.85,
+                   help="Fixed correlation for synthetic mode (ignored in --real-data mode)")
+    p.add_argument("--n-steps",    type=int,   default=1440)
+    p.add_argument("--seed",       type=int,   default=42)
+    p.add_argument("--real-data",  action="store_true",
+                   help="Fetch real BTC+ETH prices from Binance and use rolling 60-min ρ")
+    p.add_argument("--date",       type=str,   default=None,
+                   help="YYYY-MM-DD to fetch (default: latest). Only used with --real-data")
+    p.add_argument("--roll-window", type=int,  default=60,
+                   help="Rolling window in minutes for ρ estimation (default: 60)")
+    p.add_argument("--no-show",    action="store_true")
     return p.parse_args()
 
 
@@ -94,48 +104,82 @@ def print_summary_table(multi_res, btc_res, eth_res, corr: float) -> None:
     print()
 
 
+def compute_rolling_corr(btc_prices: pd.Series, eth_prices: pd.Series,
+                          window: int = 60, fallback: float = 0.85) -> pd.Series:
+    """Compute rolling Pearson ρ of 1-min log returns, fill NaN with fallback."""
+    lr_btc = np.log(btc_prices / btc_prices.shift(1))
+    lr_eth = np.log(eth_prices / eth_prices.shift(1))
+    rolling_corr = lr_btc.rolling(window).corr(lr_eth)
+    rolling_corr = rolling_corr.clip(-0.9999, 0.9999).fillna(fallback)
+    return rolling_corr
+
+
 def main() -> None:
     args = parse_args()
 
-    print(f"Generating correlated BTC + ETH price paths  (ρ={args.corr:.2f}, seed={args.seed})…")
-    btc_prices, eth_prices = generate_correlated_btc_eth(
-        S0_btc=args.S0_btc,
-        S0_eth=args.S0_eth,
-        corr=args.corr,
-        n_steps=args.n_steps,
-        seed=args.seed,
-    )
-    print(f"  BTC: ${btc_prices.min():,.0f}–${btc_prices.max():,.0f}  "
-          f"ETH: ${eth_prices.min():,.0f}–${eth_prices.max():,.0f}")
+    corr_series = None   # None → fixed ρ; Series → time-varying ρ
+    effective_corr = args.corr  # for plot title / summary table
+
+    if args.real_data:
+        from simulator.data_loader import fetch_btc_eth_prices
+        date_str = args.date or "latest"
+        print(f"Fetching real BTC + ETH 1-min prices from Binance  (date={date_str})…")
+        btc_prices, eth_prices = fetch_btc_eth_prices(
+            date=args.date, n_steps=args.n_steps
+        )
+        print(f"  Fetched {len(btc_prices)} bars")
+        print(f"  BTC: ${btc_prices.min():,.0f}–${btc_prices.max():,.0f}  "
+              f"ETH: ${eth_prices.min():,.2f}–${eth_prices.max():,.2f}")
+
+        corr_series = compute_rolling_corr(btc_prices, eth_prices,
+                                           window=args.roll_window,
+                                           fallback=args.corr)
+        effective_corr = float(corr_series.mean())
+        print(f"  Rolling ρ ({args.roll_window}-min window):  "
+              f"mean={effective_corr:.3f}  min={corr_series.min():.3f}  "
+              f"max={corr_series.max():.3f}")
+        mode_label = f"real data, rolling ρ (avg={effective_corr:.2f})"
+    else:
+        print(f"Generating correlated BTC + ETH price paths  (ρ={args.corr:.2f}, seed={args.seed})…")
+        btc_prices, eth_prices = generate_correlated_btc_eth(
+            S0_btc=args.S0_btc,
+            S0_eth=args.S0_eth,
+            corr=args.corr,
+            n_steps=args.n_steps,
+            seed=args.seed,
+        )
+        print(f"  BTC: ${btc_prices.min():,.0f}–${btc_prices.max():,.0f}  "
+              f"ETH: ${eth_prices.min():,.0f}–${eth_prices.max():,.0f}")
+        mode_label = f"ρ={args.corr:.2f}, seed={args.seed}"
+
+    n_steps = len(btc_prices)
 
     # -- Multi-asset model ---------------------------------------------------
     multi = MultiAssetMM(
         gamma=0.0165,
-        corr=args.corr,
-        S0_btc=args.S0_btc,
-        S0_eth=args.S0_eth,
-        T=args.n_steps,
+        corr=args.corr,            # starting ρ (overridden per-step by corr_series)
+        S0_btc=float(btc_prices.iloc[0]),
+        S0_eth=float(eth_prices.iloc[0]),
+        T=n_steps,
         lot_size_btc=0.01,
         lot_size_eth=0.10,
         initial_cash=100_000.0,
         seed=args.seed,
     )
-    multi_res = multi.run(btc_prices, eth_prices)
+    multi_res = multi.run(btc_prices, eth_prices, corr_series=corr_series)
 
     # -- Independent BTC AS --------------------------------------------------
-    # gamma_btc_P2 = gamma_MA * sigma_btc_abs^2 ≈ 0.0165 * 55^2 ≈ 50
     indep_btc = AvellanedaStoikov(
         gamma=50.0, delta_0=45.0, delta_min=5.0,
-        T=args.n_steps, lot_size=0.01,
+        T=n_steps, lot_size=0.01,
         initial_cash=50_000.0, seed=args.seed,
     )
     btc_res = indep_btc.run(btc_prices)
 
     # -- Independent ETH AS --------------------------------------------------
-    # gamma_eth_P2 = gamma_MA * sigma_eth_abs^2 ≈ 0.0165 * 4.97^2 ≈ 0.41
     indep_eth = AvellanedaStoikov(
         gamma=0.41, delta_0=2.7, delta_min=0.3,
-        T=args.n_steps, lot_size=0.10,
+        T=n_steps, lot_size=0.10,
         fill_k=0.446,
         initial_cash=50_000.0, seed=args.seed,
     )
@@ -144,15 +188,17 @@ def main() -> None:
     print("\nMulti-Asset MM:")
     multi.summary(multi_res)
 
-    print_summary_table(multi_res, btc_res, eth_res, args.corr)
+    print_summary_table(multi_res, btc_res, eth_res, effective_corr)
 
+    suffix = "real" if args.real_data else f"seed{args.seed}"
     fig = plot_multi_asset(
         multi_res, btc_res, eth_res,
-        corr=args.corr,
-        title=f"Multi-Asset MM — BTC + ETH  (ρ={args.corr:.2f}, seed={args.seed})",
+        corr=effective_corr,
+        corr_series=corr_series,
+        title=f"Multi-Asset MM — BTC + ETH  ({mode_label})",
     )
 
-    out_path = os.path.join(os.path.dirname(__file__), "multi_asset_results.png")
+    out_path = os.path.join(os.path.dirname(__file__), f"multi_asset_results_{suffix}.png")
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     print(f"Plot saved → {out_path}")
 

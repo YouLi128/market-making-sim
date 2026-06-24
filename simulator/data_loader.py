@@ -133,6 +133,22 @@ def fetch_historical_days(
     return days
 
 
+def fetch_btc_eth_prices(
+    date: str = None,
+    n_steps: int = 1440,
+) -> tuple:
+    """
+    Fetch aligned BTC/USDT and ETH/USDT 1-minute close prices.
+
+    Returns (btc_prices, eth_prices) as pd.Series on a shared DatetimeIndex.
+    """
+    btc = fetch_btc_price(date=date, n_steps=n_steps, symbol="BTCUSDT")
+    time.sleep(0.1)
+    eth = fetch_btc_price(date=date, n_steps=n_steps, symbol="ETHUSDT")
+    common = btc.index.intersection(eth.index)
+    return btc.loc[common].rename("btc_mid"), eth.loc[common].rename("eth_mid")
+
+
 def fetch_btc_ohlcv(
     date: str = None,
     n_steps: int = 1440,
