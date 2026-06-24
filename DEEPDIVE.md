@@ -54,7 +54,7 @@ AS 系列模型新增 `spread_pnl_approx` 列供对比。详见 `run_exact_attri
 
 ---
 
-## ~~6. 多品种对冲 / Multi-Asset Extension~~ ✅ 已完成
+## ~~6. 多品种对冲 / Multi-Asset Extension~~ ✅ 已完成（含时变 ρ）
 
 BTC + ETH 联合做市，使用组合方差梯度计算跨资产保留价格：
 ```
@@ -63,12 +63,19 @@ r_ETH = mid_ETH − γ·τ·(q_ETH·σ_ETH² + ρ·q_BTC·σ_BTC·σ_ETH)
 ```
 交叉项含义：BTC 多 + ETH 空时两边偏移量都减弱（识别对冲，不急于平仓）；BTC 多 + ETH 也多时两边同时加速平仓（风险放大）。
 
-对比两个独立单资产 AS 模型（ρ=0.85，seed=42）：
+**合成数据**（ρ=0.85，seed=42）对比两个独立单资产 AS 模型：
 - 组合风险 σ 降低 **23.2%**
 - BTC-ETH 库存相关性：多品种 **−0.875（对冲）** vs 独立 +0.947（同向漂移）
 - 总 MtM P&L：**+$710** vs +$284，最大回撤 **$0** vs −$48
 
-详见 `simulator/multi_asset_mm.py`、`run_multi_asset.py`。
+**真实 Binance 数据**（`--real-data` 模式，最新 1440 根 1分钟 K 线）：
+- 滚动 60 分钟 Pearson ρ：范围 0.733–0.968，均值 0.877
+- 组合风险 σ 降低 **37.2%**（真实相关结构下对冲效益更显著）
+- 总 MtM P&L：**+$568** vs +$515，最大回撤 **−$8** vs −$68
+- ρ 随时间变化在可视化中单独显示为第 5 个 panel
+
+详见 `simulator/multi_asset_mm.py`（`run()` 支持 `corr_series` 参数）、
+`simulator/data_loader.py`（`fetch_btc_eth_prices()`）、`run_multi_asset.py`。
 参考：Avellaneda & Stoikov (2008) §5 — multi-asset extension。
 
 ---
